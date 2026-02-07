@@ -39,6 +39,7 @@ class EPC_Optimizer:
         self.fitness = np.zeros(self.pop_size)
         self.best_penguin_pos = np.zeros(self.dim)
         self.best_penguin_score = float('inf')
+        self.best_penguin_idx = -1  
         
         # History for plotting and analysis
         self.convergence_curve = []
@@ -106,82 +107,104 @@ class EPC_Optimizer:
     def run(self):
         """
         Main execution loop of the EPC algorithm.
+        Executes the optimization process for 'max_iter' generations.
         """
         print(f"Starting EPC Optimization on {self.dim}-D Space...")
         
         for t in range(self.max_iter):
-            # 1. Evaluate Fitness
+            # -------------------------------------------------------
+            # Phase 1: Evaluation & Identifying the Leader
+            # -------------------------------------------------------
+            
+            # We need to track the best penguin of the *current* generation
+            # to prevent it from moving (Elitism).
+            current_best_val = float('inf')
+            current_best_idx = -1
+
             for i in range(self.pop_size):
-                # Calculate cost/fitness
+                # 1. Calculate cost/fitness
                 current_cost = self.func(self.population[i])
                 self.fitness[i] = current_cost
                 
-                # Update global best
+                # 2. Identify the best in current population (Local Best)
+                # We save the index to use it later in the movement phase
+                if current_cost < current_best_val:
+                    current_best_val = current_cost
+                    current_best_idx = i
+
+                # 3. Update Global Best (Historical Best)
+                # If this penguin is better than the all-time best, update the record
                 if current_cost < self.best_penguin_score:
                     self.best_penguin_score = current_cost
                     self.best_penguin_pos = self.population[i].copy()
 
-            # Record history
+            # Record history for the convergence plot
             self.convergence_curve.append(self.best_penguin_score)
 
-            # 2. Movement Phase
+            # -------------------------------------------------------
+            # Phase 2: Movement & Update Strategy
+            # -------------------------------------------------------
             new_population = np.zeros_like(self.population)
             
             for i in range(self.pop_size):
-                # The best penguin does not move (elitism)
-                if np.array_equal(self.population[i], self.best_penguin_pos):
+                # [Elitism Strategy]
+                # If this is the best penguin of the current generation, it stays put.
+                # Comparing indices (i == current_best_idx) is safer than comparing arrays.
+                if i == current_best_idx:
                     new_population[i] = self.population[i]
                     continue
 
-                # Calculate Euclidean Distance to the best penguin (Page 6, Eq: 119)
+                # 1. Calculate Euclidean Distance to the Global Best (Page 6, Eq: 119)
                 distance = np.linalg.norm(self.best_penguin_pos - self.population[i])
                 
-                # Calculate Heat/Attraction Q (Page 6, Eq: 111)
-                # Q = e^(-mu * distance)
-                # We limit Q to be within (0, 1]
+                # 2. Calculate Heat/Attraction Q (Page 6, Eq: 111)
+                # Q = e^(-mu * distance) -> Decays as distance increases
                 Q = math.exp(-self.mu * distance)
-                Q = max(0.0001, min(Q, 1.0))
+                Q = max(0.0001, min(Q, 1.0)) # Clamp Q between 0 and 1
 
-                # 3. Spiral Update (Pairwise Strategy)
-                # We iterate through dimensions in pairs (0,1), (2,3), etc.
-                # This aligns with the "Pairwise Decomposition" concept in the doc.
+                # 3. Spiral Update (Pairwise Decomposition Strategy)
+                # We process dimensions in pairs (0,1), (2,3) to apply 2D spiral math.
                 current_penguin = self.population[i]
                 updated_penguin = np.zeros(self.dim)
                 
                 for d in range(0, self.dim, 2):
-                    # Check if we have a pair or a single remaining dimension
                     if d + 1 < self.dim:
-                        # Pair (d, d+1)
+                        # Case A: Pair exists (e.g., dimensions x and y)
                         curr_pair = (current_penguin[d], current_penguin[d+1])
                         best_pair = (self.best_penguin_pos[d], self.best_penguin_pos[d+1])
                         
-                        # Apply spiral math
+                        # Apply spiral math on this 2D plane
                         new_x, new_y = self.calculate_pairwise_spiral(curr_pair, best_pair, Q)
                         
                         updated_penguin[d] = new_x
                         updated_penguin[d+1] = new_y
                     else:
-                        # Handle odd dimension case (just move linearly towards best)
+                        # Case B: Odd dimension remaining (Linear movement)
+                        # Move directly towards the best position scaled by Q
                         updated_penguin[d] = current_penguin[d] + (self.best_penguin_pos[d] - current_penguin[d]) * Q
 
                 # 4. Add Randomness (Exploration) (Page 7, Eq: 134)
-                # x_new += M * u, where u is uniform random in [-1, 1]
+                # Adds a stochastic component to prevent getting stuck in local optima
                 random_step = self.M * (np.random.uniform(-1, 1, self.dim))
                 updated_penguin += random_step
                 
-                # Check boundaries
+                # 5. Boundary Check (Saturation)
                 new_population[i] = self.check_bounds(updated_penguin)
 
-            # Update population and parameters for next iteration
+            # -------------------------------------------------------
+            # Phase 3: Finalize Iteration
+            # -------------------------------------------------------
+            # Synchronous update: Replace old population with the new one
             self.population = new_population
+            
+            # Cool down the parameters (Temperature & Randomness decay)
             self.update_parameters(t)
 
-            # Print progress every 10 iterations
+            # Log progress
             if (t + 1) % 10 == 0:
                 print(f"Iteration {t+1:03d}: Best Cost = {self.best_penguin_score:.6e}")
 
         return self.best_penguin_pos, self.best_penguin_score
-
 # =============================================================================
 # Helper Functions: Benchmarks and Visualization
 # =============================================================================
