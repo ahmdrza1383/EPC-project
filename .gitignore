@@ -1,0 +1,17 @@
+*.o
+*.obj
+
+*.exe
+*.out
+app
+my_project
+
+*.vcd
+*.gtkw
+
+build/
+
+.DS_Store
+Thumbs.db
+
+structure.txt
