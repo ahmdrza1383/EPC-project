@@ -16,8 +16,8 @@ class EPC_Optimizer:
         self.max_iter = max_iter
 
         # --- Algorithm Parameters (Based on PDF) ---
-        self.M = 2.0        # Initial movement range (Exploration)
-        self.mu = 0.5       # Heat attenuation coefficient
+        self.M = 0.05        # Initial movement range (Exploration)
+        self.mu = 0.05       # Heat attenuation coefficient
         self.a = 1.0        # Spiral parameter a
         self.b = 0.5        # Spiral parameter b
 
@@ -36,10 +36,10 @@ class EPC_Optimizer:
     def calculate_spiral_move(self, x_i, y_i, x_best, y_best, Q):
         """
         Calculates the new 2D position based on logarithmic spiral equations.
-        Ref: PDF numerical example logic (atan2(y, x)).
+        Ref: PDF numerical example logic matches atan2(y, x).
         """
         # 1. Calculate Angles
-        # Using atan2(y, x) matches the numerical example in the PDF (0.588 rad for point (3,2))
+        # Note: We use atan2(y, x) which is standard math notation
         theta_i = math.atan2(y_i, x_i)
         theta_j = math.atan2(y_best, x_best)
 
@@ -105,7 +105,12 @@ class EPC_Optimizer:
 
                 # A) Distance and Heat Calculation
                 dist = np.linalg.norm(self.population[i] - self.best_position)
-                Q = math.exp(-self.mu * dist)
+                # Q = e^(-mu * dist)
+                try:
+                    Q = math.exp(-self.mu * dist)
+                except OverflowError:
+                    Q = 0.0 # If distance is huge, heat is zero
+                
                 Q = np.clip(Q, 0.0001, 1.0) # Clamp Q to valid range
 
                 # B) Spiral Movement (All-Pairs Interaction)
@@ -114,7 +119,7 @@ class EPC_Optimizer:
 
                 current_p = self.population[i]
 
-                # Iterate over all unique pairs of dimensions (O(D^2) complexity)
+                # Iterate over all unique pairs of dimensions
                 for d1 in range(self.dim):
                     for d2 in range(d1 + 1, self.dim):
                         # Coordinates for the current pair
@@ -163,22 +168,52 @@ class EPC_Optimizer:
         return self.best_score
 
 # -------------------------------------------------------
-# Benchmark Function
+# Benchmark Functions
 # -------------------------------------------------------
 def sphere_function(x):
-    """Simple Sphere function: sum(x^2). Global minimum is 0."""
+    """
+    [cite_start]Sphere Function [cite: 140]
+    Global Minimum: 0 at (0,0,...,0)
+    """
     return np.sum(x**2)
+
+def rosenbrock_function(x):
+    """
+    [cite_start]Rosenbrock Function [cite: 142]
+    Global Minimum: 0 at (1,1,...,1)
+    """
+    sum_val = 0
+    # Loop from 0 to D-2 (corresponds to i=1 to D-1 in math notation)
+    for i in range(len(x) - 1):
+        term1 = 100 * (x[i+1] - x[i]**2)**2
+        term2 = (x[i] - 1)**2
+        sum_val += term1 + term2
+    return sum_val
 
 # -------------------------------------------------------
 # Main Entry Point
 # -------------------------------------------------------
 if __name__ == "__main__":
+    np.random.seed(42)
+    # --- SELECT FUNCTION HERE ---
+    # Options: "sphere" or "rosenbrock"
+    SELECTED_FUNC = "sphere" 
+    
     # Simulation Parameters
-    DIMENSIONS = 100
+    DIMENSIONS = 100     # Try 4, 10, or 30
     POPULATION = 20
     ITERATIONS = 100
-    SEARCH_SPACE = (-10, 10)
     
+    if SELECTED_FUNC == "sphere":
+        objective_func = sphere_function
+        SEARCH_SPACE = (-5.12, 5.12) # Standard bounds for Sphere
+        print(">>> Running SPHERE Benchmark")
+        
+    elif SELECTED_FUNC == "rosenbrock":
+        objective_func = rosenbrock_function
+        SEARCH_SPACE = (-5, 10)   # Rosenbrock is sensitive, smaller bounds are safer
+        print(">>> Running ROSENBROCK Benchmark")
+
     # Run Optimizer
-    optimizer = EPC_Optimizer(sphere_function, DIMENSIONS, SEARCH_SPACE, POPULATION, ITERATIONS)
+    optimizer = EPC_Optimizer(objective_func, DIMENSIONS, SEARCH_SPACE, POPULATION, ITERATIONS)
     optimizer.run()
