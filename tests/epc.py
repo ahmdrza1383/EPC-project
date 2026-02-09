@@ -2,11 +2,16 @@ import numpy as np
 import math
 import time
 
-class EPC_Optimizer:
-    def __init__(self, objective_func, dim, bounds, population_size=30, max_iter=100):
+class EPC_Optimizer_Final:
+    def __init__(self, objective_func, dim, bounds, population_size=30, max_iter=100, 
+                 strategy='all_pairs', optimization_mode='min'):
         """
-        Emperor Penguins Colony (EPC) Algorithm Implementation.
-        Targeted for Co-design project simulation.
+        Emperor Penguins Colony (EPC) Algorithm - Corrected Logic
+        
+        Logic:
+        1. Find Iteration Best.
+        2. Normal Penguins: Spiral Move towards IterBest + Random Noise.
+        3. IterBest Penguin: No Spiral Move + Random Noise.
         """
         self.func = objective_func
         self.dim = dim
@@ -14,176 +19,195 @@ class EPC_Optimizer:
         self.ub = bounds[1]
         self.pop_size = population_size
         self.max_iter = max_iter
+        self.strategy = strategy
+        self.mode = optimization_mode.lower()
 
-        # --- Algorithm Parameters (Based on PDF) ---
-        self.M = 0.05        # Initial movement range (Exploration)
-        self.mu = 0.05       # Heat attenuation coefficient
-        self.a = 1.0        # Spiral parameter a
-        self.b = 0.5        # Spiral parameter b
+        # --- Algorithm Parameters ---
+        self.M = 0.5        # دامنه جهش تصادفی (PDF Page 7)
+        self.mu = 0.05      # ضریب تضعیف گرما
+        self.a = 1.0        # پارامتر اسپیرال
+        self.b = 0.5        # پارامتر اسپیرال
 
-        # Initialization
+        # تنظیم همسایگان برای استراتژی Random
+        if self.strategy == 'random':
+            self.n_neighbors = max(2, int(math.sqrt(self.dim)))
+        else:
+            self.n_neighbors = self.dim - 1
+
+        # مقداردهی اولیه
         self.population = np.random.uniform(self.lb, self.ub, (self.pop_size, self.dim))
         self.fitness = np.zeros(self.pop_size)
 
-        # Global Best Record
-        self.best_position = np.zeros(self.dim)
-        self.best_score = float('inf')
+        # بهترین جواب کل (صرفاً برای گزارش)
+        self.global_best_pos = np.zeros(self.dim)
+        if self.mode == 'min':
+            self.global_best_score = float('inf')
+        else:
+            self.global_best_score = float('-inf')
 
     def check_bounds(self, position):
-        """Clamps the solution within the defined search space."""
         return np.clip(position, self.lb, self.ub)
 
+    def is_better(self, new_score, current_score):
+        if self.mode == 'min':
+            return new_score < current_score
+        else:
+            return new_score > current_score
+
     def calculate_spiral_move(self, x_i, y_i, x_best, y_best, Q):
-        """
-        Calculates the new 2D position based on logarithmic spiral equations.
-        Ref: PDF numerical example logic matches atan2(y, x).
-        """
-        # 1. Calculate Angles
-        # Note: We use atan2(y, x) which is standard math notation
+        # 1. محاسبه زاویه‌ها (atan2(y, x) طبق مثال عددی)
         theta_i = math.atan2(y_i, x_i)
         theta_j = math.atan2(y_best, x_best)
 
-        # 2. Calculate Spiral Factor S
-        # Formula: S = (1 - Q) * e^(b * theta_j) + Q * e^(b * theta_i)
+        # 2. محاسبه فاکتور S
         try:
             term1 = (1.0 - Q) * math.exp(self.b * theta_j)
             term2 = Q * math.exp(self.b * theta_i)
             S = term1 + term2
         except OverflowError:
-            S = 1.0  # Safe fallback
+            S = 1.0
 
-        # Avoid math domain error for log
         if S <= 0: S = 1e-6
 
-        # 3. Calculate New Angle and Radius
+        # 3. محاسبه شعاع و زاویه جدید
         theta_k = (1.0 / self.b) * math.log(S)
         r_k = self.a * S
 
-        # 4. Convert back to Cartesian coordinates
+        # 4. تبدیل به کارتزین
         new_x = r_k * math.cos(theta_k)
         new_y = r_k * math.sin(theta_k)
 
         return new_x, new_y
 
     def run(self):
-        print(f"{'='*30} EPC START {'='*30}")
-        print(f"Population: {self.pop_size} | Dimensions: {self.dim} | Max Iterations: {self.max_iter}")
+        print(f"{'='*30} EPC FINAL {'='*30}")
+        print(f"Mode: {self.mode.upper()} | Strategy: {self.strategy.upper()}")
+        print(f"Pop={self.pop_size} | Dim={self.dim} | Iter={self.max_iter}")
         print("-" * 75)
 
         start_time = time.time()
 
         for t in range(self.max_iter):
             # ---------------------------------------------------
-            # Phase 1: Evaluation & Update Best
+            # Phase 1: Evaluation & Finding Iteration Best
             # ---------------------------------------------------
+            iter_best_score = float('inf') if self.mode == 'min' else float('-inf')
+            iter_best_idx = -1
+
             for i in range(self.pop_size):
-                # Calculate cost
                 cost = self.func(self.population[i])
                 self.fitness[i] = cost
 
-                # Update Global Best
-                if cost < self.best_score:
-                    self.best_score = cost
-                    self.best_position = self.population[i].copy()
+                # پیدا کردن بهترین پنگوئن این دور
+                if self.is_better(cost, iter_best_score):
+                    iter_best_score = cost
+                    iter_best_idx = i
+                
+                # آپدیت بهترین کل (جهت گزارش)
+                if self.is_better(cost, self.global_best_score):
+                    self.global_best_score = cost
+                    self.global_best_pos = self.population[i].copy()
+
+            # کپی موقعیت بهترین پنگوئن این دور (تا در طول آپدیت‌ها تغییر نکند)
+            iter_best_position = self.population[iter_best_idx].copy()
+
+            print(f"Iter {t+1:3d}/{self.max_iter} | "
+                  f"Global: {self.global_best_score:.6e} | "
+                  f"IterBest: {iter_best_score:.6e} | M: {self.M:.4f}")
 
             # ---------------------------------------------------
-            # Logging: Print status every iteration
-            # ---------------------------------------------------
-            print(f"Iter {t+1:3d}/{self.max_iter} | Best Cost: {self.best_score:.6e} | "
-                  f"mu: {self.mu:.4f} | M: {self.M:.4f}")
-
-            # ---------------------------------------------------
-            # Phase 2: Movement (All-Pairs Strategy)
+            # Phase 2: Movement
             # ---------------------------------------------------
             new_population = np.zeros_like(self.population)
 
             for i in range(self.pop_size):
-                # Elitism: Keep the best penguin stable
-                if np.array_equal(self.population[i], self.best_position):
-                    new_population[i] = self.population[i]
-                    continue
-
-                # A) Distance and Heat Calculation
-                dist = np.linalg.norm(self.population[i] - self.best_position)
-                # Q = e^(-mu * dist)
-                try:
-                    Q = math.exp(-self.mu * dist)
-                except OverflowError:
-                    Q = 0.0 # If distance is huge, heat is zero
                 
-                Q = np.clip(Q, 0.0001, 1.0) # Clamp Q to valid range
+                # موقعیت اولیه قبل از اعمال نویز
+                temp_position = np.zeros(self.dim)
 
-                # B) Spiral Movement (All-Pairs Interaction)
-                accumulated_moves = np.zeros(self.dim)
-                move_counts = np.zeros(self.dim)
+                # ==================================================
+                # شرط اصلی: آیا این پنگوئن، بهترینِ این دور است؟
+                # ==================================================
+                if i == iter_best_idx:
+                    # اگر بهترین است: حرکت اسپیرال ندارد.
+                    # موقعیتش ثابت می‌ماند (تا قبل از نویز)
+                    temp_position = self.population[i].copy()
+                
+                else:
+                    # اگر پنگوئن معمولی است: حرکت اسپیرال به سمت IterBest
+                    dist = np.linalg.norm(self.population[i] - iter_best_position)
+                    try:
+                        Q = math.exp(-self.mu * dist)
+                    except OverflowError:
+                        Q = 0.0
+                    Q = np.clip(Q, 0.0001, 1.0)
 
-                current_p = self.population[i]
+                    accumulated_moves = np.zeros(self.dim)
+                    move_counts = np.zeros(self.dim)
+                    current_p = self.population[i]
 
-                # Iterate over all unique pairs of dimensions
-                for d1 in range(self.dim):
-                    for d2 in range(d1 + 1, self.dim):
-                        # Coordinates for the current pair
-                        curr_x, curr_y = current_p[d1], current_p[d2]
-                        best_x, best_y = self.best_position[d1], self.best_position[d2]
+                    # حلقه روی ابعاد (استراتژی)
+                    for d1 in range(self.dim):
+                        if self.strategy == 'random':
+                            candidates = np.delete(np.arange(self.dim), d1)
+                            n_pick = min(len(candidates), self.n_neighbors)
+                            partners = np.random.choice(candidates, n_pick, replace=False)
+                        else:
+                            partners = range(d1 + 1, self.dim)
 
-                        # Calculate spiral move
-                        nx, ny = self.calculate_spiral_move(curr_x, curr_y, best_x, best_y, Q)
+                        for d2 in partners:
+                            curr_x, curr_y = current_p[d1], current_p[d2]
+                            best_x, best_y = iter_best_position[d1], iter_best_position[d2]
 
-                        # Accumulate proposed moves
-                        accumulated_moves[d1] += nx
-                        move_counts[d1] += 1
-                        accumulated_moves[d2] += ny
-                        move_counts[d2] += 1
+                            nx, ny = self.calculate_spiral_move(curr_x, curr_y, best_x, best_y, Q)
 
-                # C) Average and Apply Moves
-                updated_penguin = np.zeros(self.dim)
-                for d in range(self.dim):
-                    if move_counts[d] > 0:
-                        updated_penguin[d] = accumulated_moves[d] / move_counts[d]
-                    else:
-                        updated_penguin[d] = current_p[d]
+                            accumulated_moves[d1] += nx
+                            move_counts[d1] += 1
+                            
+                            if self.strategy == 'all_pairs':
+                                accumulated_moves[d2] += ny
+                                move_counts[d2] += 1
 
-                # D) Add Randomness (Exploration)
+                    # میانگین‌گیری
+                    for d in range(self.dim):
+                        if move_counts[d] > 0:
+                            temp_position[d] = accumulated_moves[d] / move_counts[d]
+                        else:
+                            temp_position[d] = current_p[d]
+
+                # ==================================================
+                # اعمال نویز تصادفی (برای همه، حتی بهترین پنگوئن)
+                # ==================================================
+                # x_new = x_temp + M * u
                 random_step = self.M * np.random.uniform(-1, 1, self.dim)
-                updated_penguin += random_step
+                final_position = temp_position + random_step
 
-                # E) Boundary Check
-                new_population[i] = self.check_bounds(updated_penguin)
+                # اعمال مرزها
+                new_population[i] = self.check_bounds(final_position)
 
-            # Apply new population
+            # پایان حلقه پنگوئن‌ها
             self.population = new_population
 
-            # Update control parameters (Cooling mechanism)
+            # Cooling
             if t > 0:
                 self.M *= 0.99
                 self.mu *= 0.99
 
         total_time = time.time() - start_time
         print("-" * 75)
-        print(f"Optimization Finished.")
-        print(f"Final Best Cost: {self.best_score:.10f}")
-        print(f"Total Execution Time: {total_time:.4f} sec")
+        print(f"Finished. Global Best ({self.mode}): {self.global_best_score:.10f}")
+        print(f"Execution Time: {total_time:.4f} sec")
         print(f"{'='*30} EPC END {'='*30}")
-        
-        return self.best_score
+        return self.global_best_score
 
 # -------------------------------------------------------
-# Benchmark Functions
+# توابع تست
 # -------------------------------------------------------
 def sphere_function(x):
-    """
-    [cite_start]Sphere Function [cite: 140]
-    Global Minimum: 0 at (0,0,...,0)
-    """
     return np.sum(x**2)
 
 def rosenbrock_function(x):
-    """
-    [cite_start]Rosenbrock Function [cite: 142]
-    Global Minimum: 0 at (1,1,...,1)
-    """
     sum_val = 0
-    # Loop from 0 to D-2 (corresponds to i=1 to D-1 in math notation)
     for i in range(len(x) - 1):
         term1 = 100 * (x[i+1] - x[i]**2)**2
         term2 = (x[i] - 1)**2
@@ -191,29 +215,30 @@ def rosenbrock_function(x):
     return sum_val
 
 # -------------------------------------------------------
-# Main Entry Point
+# Main
 # -------------------------------------------------------
 if __name__ == "__main__":
-    np.random.seed(42)
-    # --- SELECT FUNCTION HERE ---
-    # Options: "sphere" or "rosenbrock"
-    SELECTED_FUNC = "sphere" 
-    
-    # Simulation Parameters
-    DIMENSIONS = 100     # Try 4, 10, or 30
-    POPULATION = 20
-    ITERATIONS = 100
-    
-    if SELECTED_FUNC == "sphere":
-        objective_func = sphere_function
-        SEARCH_SPACE = (-5.12, 5.12) # Standard bounds for Sphere
-        print(">>> Running SPHERE Benchmark")
-        
-    elif SELECTED_FUNC == "rosenbrock":
-        objective_func = rosenbrock_function
-        SEARCH_SPACE = (-5, 10)   # Rosenbrock is sensitive, smaller bounds are safer
-        print(">>> Running ROSENBROCK Benchmark")
+    np.random.seed(30) # برای نتایج ثابت
 
-    # Run Optimizer
-    optimizer = EPC_Optimizer(objective_func, DIMENSIONS, SEARCH_SPACE, POPULATION, ITERATIONS)
+    # تنظیمات
+    # تابع: sphere یا rosenbrock
+    FUNC_NAME = "sphere" 
+    
+    if FUNC_NAME == "sphere":
+        func = sphere_function
+        bounds = (-10, 10)
+    else:
+        func = rosenbrock_function
+        bounds = (-10, 10)
+
+    optimizer = EPC_Optimizer_Final(
+        objective_func=func,
+        dim=100,                 # ابعاد
+        bounds=bounds,
+        population_size=20,
+        max_iter=100,
+        strategy='random',      # random یا all_pairs
+        optimization_mode='max' # min یا max
+    )
+    
     optimizer.run()
