@@ -238,7 +238,7 @@ if __name__ == "__main__":
         population_size=20,
         max_iter=100,
         strategy='random',      # random یا all_pairs
-        optimization_mode='max' # min یا max
+        optimization_mode='min' # min یا max
     )
     
     optimizer.run()
