@@ -5,26 +5,26 @@
 #include <vector>
 #include "config.h"
 #include "Dim_Unit.h"
+// دیگر نیازی به Cost_Unit.h در اینجا نیست
 
 SC_MODULE(Penguin_Core) {
     sc_in<bool> clk;
-    sc_in<bool> start;
-    sc_out<bool> done;
+    sc_in<bool> start;      // فقط شروع حرکت
+    sc_out<bool> done;      // فقط پایان حرکت
 
     // هویت
     int core_id;
     int* iter_best_idx_ptr;
 
-    // حافظه داخلی
+    // حافظه داخلی (پابلیک است تا Cost_Unit بتواند بخواند)
     double position[DIM];
     double next_position[DIM]; 
 
-    // پوینترهای ورودی (از main می‌آیند)
+    // پوینترهای ورودی
     double* iter_best_pos_ptr;
     double* M_ptr;
     double* mu_ptr;
     
-    // متغیر داخلی Q
     double calculated_Q; 
 
     // فرزندان
@@ -38,7 +38,6 @@ SC_MODULE(Penguin_Core) {
             if (start.read()) {
                 done.write(false);
 
-                // اگر پوینترها ست نشده باشند، خطا ندهیم ولی کاری هم نکنیم
                 if (!iter_best_idx_ptr || !M_ptr || !mu_ptr || !iter_best_pos_ptr) {
                      done.write(true);
                      continue;
@@ -56,7 +55,7 @@ SC_MODULE(Penguin_Core) {
                     wait(5, SC_NS);
                 } 
                 else {
-                    // رفتار عادی: محاسبه Q و استارت زدن فرزندان
+                    // رفتار عادی
                     double dist = 0;
                     for(int k=0; k<DIM; k++) {
                         double diff = position[k] - iter_best_pos_ptr[k];
@@ -67,12 +66,10 @@ SC_MODULE(Penguin_Core) {
                     if (calculated_Q > 1) calculated_Q=1; 
                     if (calculated_Q < 1e-4) calculated_Q=1e-4;
 
-                    // شروع پردازش موازی
                     start_dims.write(true);
                     wait(); 
                     start_dims.write(false);
 
-                    // انتظار برای پایان فرزندان
                     bool all_dims_finished = false;
                     while (!all_dims_finished) {
                         wait(); 
@@ -85,7 +82,6 @@ SC_MODULE(Penguin_Core) {
                         }
                     }
 
-                    // کپی نتایج
                     for(int d=0; d<DIM; d++) {
                         position[d] = next_position[d];
                     }
@@ -96,10 +92,8 @@ SC_MODULE(Penguin_Core) {
         }
     }
 
-    // تابع مهم برای اتصال پوینترهای فرزندان
     void fix_pointers() {
         for(auto unit : dim_units) {
-            // این مقادیر الان معتبر هستند (چون در main ست شده‌اند)
             unit->iter_best_pos_ptr = this->iter_best_pos_ptr;
             unit->M_ptr = this->M_ptr;
         }
@@ -110,7 +104,6 @@ SC_MODULE(Penguin_Core) {
         sensitive << clk.pos();
         done.initialize(true);
         
-        // مقداردهی اولیه پوینترها به نال
         iter_best_idx_ptr = nullptr;
         iter_best_pos_ptr = nullptr;
         M_ptr = nullptr;
@@ -132,9 +125,6 @@ SC_MODULE(Penguin_Core) {
             unit->next_pos_ptr = next_position;
             unit->Q_val_ptr = &calculated_Q;
             
-            // نکته: M_ptr و iter_best_pos_ptr اینجا ست نمی‌شوند
-            // چون هنوز مقدار ندارند. تابع fix_pointers بعداً این کار را می‌کند.
-
             dim_units.push_back(unit);
             dim_dones.push_back(d_done);
         }

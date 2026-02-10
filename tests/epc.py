@@ -218,7 +218,7 @@ def rosenbrock_function(x):
 # Main
 # -------------------------------------------------------
 if __name__ == "__main__":
-    np.random.seed(30) # برای نتایج ثابت
+    np.random.seed(50) # برای نتایج ثابت
 
     # تنظیمات
     # تابع: sphere یا rosenbrock
