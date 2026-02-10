@@ -77,19 +77,16 @@ int sc_main(int argc, char* argv[]) {
         core->M_ptr = &M;
         core->mu_ptr = &mu;
         core->iter_best_idx_ptr = &iter_best_idx_shared;
-
-        // چون ماژول‌های داخلی (Dim_Unit) به این پوینترها نیاز دارند
-        // و در زمان Constructor هنوز ست نشده بودند، الان دستی ست می‌کنیم:
-        core->fix_pointers();
-        
         for(int d=0; d<DIM; d++) {
             core->position[d] = LB + ((rand()/(double)RAND_MAX) * (UB - LB));
         }
 
-// چون ماژول‌های داخلی (Dim_Unit) به این پوینترها نیاز دارند
-        // و در زمان Constructor هنوز ست نشده بودند، الان دستی ست می‌کنیم:
-        core->fix_pointers();
+        core->fix_pointers(); 
+
+        cores.push_back(core);
+        core_dones.push_back(done);
     }
+
 
     sc_trace_file *tf = sc_create_vcd_trace_file("epc_waves");
     sc_trace(tf, clk, "clk");

@@ -15,7 +15,7 @@ LDFLAGS = -L$(SYSTEMC_HOME)/lib-linux64 -lsystemc -lm -Wl,-rpath=$(SYSTEMC_HOME)
 # 5. نام فایل خروجی و ورودی‌ها
 TARGET = epc_sim
 SRCS = main.cpp
-HEADERS = config.h Spiral_ALU.h Penguin_Core.h
+HEADERS = config.h Spiral_ALU.h Dim_Unit.h Penguin_Core.h
 
 # 6. دستور پیش‌فرض
 all: $(TARGET)
