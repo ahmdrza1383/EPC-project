@@ -11,7 +11,6 @@ SC_MODULE(Spiral_ALU) {
     const double a = 1.0;
     const double b = 0.5;
 
-    // تابع محاسبه (بدون تغییر)
     void compute(double curr_x, double curr_y, double best_x, double best_y, double Q, 
                  double &out_nx, double &out_ny) {
         
@@ -33,4 +32,4 @@ SC_MODULE(Spiral_ALU) {
     SC_CTOR(Spiral_ALU) {}
 };
 
-#endif // SPIRAL_ALU_H
+#endif 

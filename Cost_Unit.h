@@ -11,9 +11,7 @@ SC_MODULE(Cost_Unit) {
     sc_in<bool> start;
     sc_out<bool> done;
 
-    // پوینتر به موقعیت پنگوئن (که در ماژول دیگر است)
     double* position_ptr;
-    // پوینتر به متغیری در Main برای ذخیره نتیجه
     double* cost_output_ptr;
 
     void compute_logic() {
@@ -23,14 +21,13 @@ SC_MODULE(Cost_Unit) {
                 done.write(false);
                 
                 if (!position_ptr || !cost_output_ptr) {
-                    // جهت اطمینان
                     done.write(true);
                     continue; 
                 }
 
                 double sum = 0;
 
-                #if FUNC_ID == 0 // Rosenbrock
+                #if FUNC_ID == 0
                     for (int i = 0; i < DIM - 1; i++) {
                         double x_next = position_ptr[i+1];
                         double x_curr = position_ptr[i];
@@ -38,13 +35,13 @@ SC_MODULE(Cost_Unit) {
                         double t2 = std::pow(x_curr - 1, 2);
                         sum += t1 + t2;
                     }
-                #elif FUNC_ID == 1 // Sphere
+                #elif FUNC_ID == 1
                     for (int i = 0; i < DIM; i++) {
                         sum += position_ptr[i] * position_ptr[i];
                     }
                 #endif
                 
-                wait(50, SC_NS); // شبیه‌سازی تاخیر سخت‌افزار
+                wait(50, SC_NS);
 
                 *cost_output_ptr = sum;
                 done.write(true);
@@ -63,4 +60,4 @@ SC_MODULE(Cost_Unit) {
     }
 };
 
-#endif // COST_UNIT_H
+#endif

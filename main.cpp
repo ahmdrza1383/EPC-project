@@ -3,9 +3,8 @@
 #include <iomanip>
 #include "config.h"
 #include "Penguin_Core.h"
-#include "Cost_Unit.h" // اینکلود جداگانه
+#include "Cost_Unit.h" 
 
-// تابع کمکی
 bool is_better(double new_val, double best_val) {
     #if OPT_MODE == 0 
         return new_val < best_val;
@@ -19,21 +18,17 @@ int sc_main(int argc, char* argv[]) {
 
     sc_clock clk("clk", 10, SC_NS);
     
-    // سیگنال‌های کنترلی
-    sc_signal<bool> start_move_all; // شروع حرکت پنگوئن‌ها
-    sc_signal<bool> start_calc_all; // شروع محاسبه هزینه‌ها
+    sc_signal<bool> start_move_all; 
+    sc_signal<bool> start_calc_all; 
     
-    // وکتورها برای مدیریت ماژول‌ها و سیگنال‌ها
     std::vector<Penguin_Core*> penguins;
     std::vector<sc_signal<bool>*> penguin_dones;
 
     std::vector<Cost_Unit*> cost_units;
     std::vector<sc_signal<bool>*> cost_dones;
 
-    // آرایه‌ای در Main برای ذخیره نتایج هزینه هر پنگوئن
     double current_costs[POP_SIZE];
 
-    // حافظه‌های مشترک
     double iter_best_pos[DIM];
     int iter_best_idx_shared = -1; 
     double M = M_INIT;
@@ -50,28 +45,22 @@ int sc_main(int argc, char* argv[]) {
     std::cout << "Mode: " << (OPT_MODE == 0 ? "MINIMIZE" : "MAXIMIZE") << std::endl;
     std::cout << "Strategy: " << (STRATEGY_ID == 1 ? "RANDOM" : "ALL_PAIRS") << std::endl;
 
-    // --------------------------------------------------------
-    // ساخت ماژول‌ها و سیم‌کشی
-    // --------------------------------------------------------
     for(int i=0; i<POP_SIZE; i++) {
-        // 1. ساخت پنگوئن
         char p_name[20];
         sprintf(p_name, "Penguin_%d", i);
         Penguin_Core* p = new Penguin_Core(p_name);
         sc_signal<bool>* p_done = new sc_signal<bool>();
 
         p->clk(clk);
-        p->start(start_move_all); // وصل به سیگنال حرکت
+        p->start(start_move_all); 
         p->done(*p_done);
 
-        // تنظیمات پنگوئن
         p->core_id = i;
         p->iter_best_idx_ptr = &iter_best_idx_shared;
         p->iter_best_pos_ptr = iter_best_pos;
         p->M_ptr = &M;
         p->mu_ptr = &mu;
         
-        // مقداردهی اولیه تصادفی
         for(int d=0; d<DIM; d++) {
             p->position[d] = LB + ((rand()/(double)RAND_MAX) * (UB - LB));
         }
@@ -80,19 +69,17 @@ int sc_main(int argc, char* argv[]) {
         penguins.push_back(p);
         penguin_dones.push_back(p_done);
 
-        // 2. ساخت واحد هزینه برای همین پنگوئن
         char c_name[20];
         sprintf(c_name, "CostUnit_%d", i);
         Cost_Unit* c = new Cost_Unit(c_name);
         sc_signal<bool>* c_done = new sc_signal<bool>();
 
         c->clk(clk);
-        c->start(start_calc_all); // وصل به سیگنال محاسبه
+        c->start(start_calc_all); 
         c->done(*c_done);
 
-        // *** اتصال حیاتی: وصل کردن واحد هزینه به موقعیت پنگوئن ***
-        c->position_ptr = p->position;      // خواندن از پنگوئن
-        c->cost_output_ptr = &current_costs[i]; // نوشتن در آرایه Main
+        c->position_ptr = p->position;      
+        c->cost_output_ptr = &current_costs[i]; 
 
         cost_units.push_back(c);
         cost_dones.push_back(c_done);
@@ -104,19 +91,12 @@ int sc_main(int argc, char* argv[]) {
     sc_trace(tf, start_calc_all, "Start_Cost");
     sc_trace(tf, global_best_score, "Global_Best");
 
-    // ==========================================
-    // حلقه اصلی شبیه‌سازی
-    // ==========================================
     for (int t = 0; t < MAX_ITER; t++) {
 
-        // --------------------------------------
-        // فاز ۱: محاسبه هزینه (موازی)
-        // --------------------------------------
         start_calc_all.write(true);
         sc_start(10, SC_NS);
         start_calc_all.write(false);
 
-        // انتظار برای تمام شدن همه واحدهای هزینه
         bool costs_finished = false;
         while(!costs_finished) {
             sc_start(10, SC_NS);
@@ -129,9 +109,6 @@ int sc_main(int argc, char* argv[]) {
             }
         }
 
-        // --------------------------------------
-        // فاز ۲: انتخاب بهترین (نرم‌افزاری)
-        // --------------------------------------
         double best_val_iter;
         #if OPT_MODE == 0
              best_val_iter = 1e9;
@@ -141,7 +118,6 @@ int sc_main(int argc, char* argv[]) {
         int best_idx = -1;
 
         for(int i=0; i<POP_SIZE; i++) {
-            // خواندن مستقیم از آرایه‌ای که Cost_Unit پر کرده است
             double cost = current_costs[i];
             
             if (is_better(cost, best_val_iter)) {
@@ -153,7 +129,6 @@ int sc_main(int argc, char* argv[]) {
             }
         }
 
-        // آپدیت اطلاعات مشترک برای دور بعد
         for(int d=0; d<DIM; d++) {
             iter_best_pos[d] = penguins[best_idx]->position[d];
         }
@@ -163,14 +138,10 @@ int sc_main(int argc, char* argv[]) {
                   << " | Global Best: " << global_best_score 
                   << " | Best ID: " << best_idx << std::endl;
 
-        // --------------------------------------
-        // فاز ۳: حرکت پنگوئن‌ها (موازی)
-        // --------------------------------------
         start_move_all.write(true);
         sc_start(10, SC_NS);
         start_move_all.write(false);
 
-        // انتظار برای تمام شدن حرکت همه پنگوئن‌ها
         bool moves_finished = false;
         while(!moves_finished) {
             sc_start(10, SC_NS);
@@ -183,7 +154,6 @@ int sc_main(int argc, char* argv[]) {
             }
         }
 
-        // کاهش دما
         M *= COOLING_RATE;
         mu *= COOLING_RATE;
     }
@@ -191,7 +161,6 @@ int sc_main(int argc, char* argv[]) {
     sc_close_vcd_trace_file(tf);
     std::cout << "=== FINISHED ===" << std::endl;
 
-    // پاکسازی حافظه
     for(auto p : penguins) delete p;
     for(auto pd : penguin_dones) delete pd;
     for(auto c : cost_units) delete c;

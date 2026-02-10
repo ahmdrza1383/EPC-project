@@ -5,29 +5,24 @@
 #include <vector>
 #include "config.h"
 #include "Dim_Unit.h"
-// دیگر نیازی به Cost_Unit.h در اینجا نیست
 
 SC_MODULE(Penguin_Core) {
     sc_in<bool> clk;
-    sc_in<bool> start;      // فقط شروع حرکت
-    sc_out<bool> done;      // فقط پایان حرکت
+    sc_in<bool> start;
+    sc_out<bool> done;
 
-    // هویت
     int core_id;
     int* iter_best_idx_ptr;
 
-    // حافظه داخلی (پابلیک است تا Cost_Unit بتواند بخواند)
     double position[DIM];
     double next_position[DIM]; 
 
-    // پوینترهای ورودی
     double* iter_best_pos_ptr;
     double* M_ptr;
     double* mu_ptr;
     
     double calculated_Q; 
 
-    // فرزندان
     std::vector<Dim_Unit*> dim_units;
     std::vector<sc_signal<bool>*> dim_dones;
     sc_signal<bool> start_dims;
@@ -44,7 +39,6 @@ SC_MODULE(Penguin_Core) {
                 }
 
                 if (core_id == *iter_best_idx_ptr) {
-                    // رفتار بهترین پنگوئن: فقط نویز
                     for(int d=0; d<DIM; d++) {
                          double noise = (*M_ptr) * ((rand() / (double)RAND_MAX) * 2 - 1);
                          double val = position[d] + noise;
@@ -55,7 +49,6 @@ SC_MODULE(Penguin_Core) {
                     wait(5, SC_NS);
                 } 
                 else {
-                    // رفتار عادی
                     double dist = 0;
                     for(int k=0; k<DIM; k++) {
                         double diff = position[k] - iter_best_pos_ptr[k];
@@ -131,4 +124,4 @@ SC_MODULE(Penguin_Core) {
     }
 };
 
-#endif // PENGUIN_CORE_H
+#endif
