@@ -3,31 +3,34 @@
 
 #include <systemc.h>
 #include <vector>
-#include <cmath>
-#include <algorithm>
 #include "config.h"
-#include "Spiral_ALU.h"
+#include "Dim_Unit.h" // ماژول فرزند جدید
 
 SC_MODULE(Penguin_Core) {
     sc_in<bool> clk;
     sc_in<bool> start;
     sc_out<bool> done;
 
-    // --- شناسه هویت (Identity) ---
-    int core_id;                 // شماره من
-    int* iter_best_idx_ptr;      // اشاره‌گر به شماره بهترین پنگوئن
+    // --- هویت ---
+    int core_id;
+    int* iter_best_idx_ptr;
 
-    // حافظه داخلی
-    double position[DIM];
-    double accumulated_moves[DIM];
-    double move_counts[DIM];
+    // --- حافظه ---
+    double position[DIM];      // وضعیت فعلی
+    double next_position[DIM]; // بافر وضعیت بعدی (برای جلوگیری از تداخل موازی)
 
-    // ورودی‌های مشترک
+    // --- ورودی‌های مشترک ---
     double* iter_best_pos_ptr;
     double* M_ptr;
     double* mu_ptr;
+    
+    // متغیر داخلی برای Q که باید به فرزندان بدهیم
+    double calculated_Q; 
 
-    Spiral_ALU* alu;
+    // --- فرزندان موازی (Parallel Execution Units) ---
+    std::vector<Dim_Unit*> dim_units;
+    std::vector<sc_signal<bool>*> dim_dones; // سیگنال پایان هر فرزند
+    sc_signal<bool> start_dims; // سیگنال شروع همگانی برای فرزندان
 
     void process_logic() {
         while (true) {
@@ -35,97 +38,56 @@ SC_MODULE(Penguin_Core) {
             if (start.read()) {
                 done.write(false);
 
-                // =========================================================
-                // منطق دقیق پایتون: تفکیک رفتار بهترین پنگوئن
-                // =========================================================
-                
-                // بررسی: آیا من بهترین پنگوئن این دور هستم؟
-                bool is_best = (core_id == *iter_best_idx_ptr);
-
-                if (is_best) {
-                    // *** رفتار پنگوئن بهترین: حرکت اسپیرال ندارد ***
-                    // فقط ۱۰ نانوثانیه صبر می‌کند (مدل‌سازی بیکاری یا تاخیر عبور سیگنال)
-                    wait(10, SC_NS);
-                    
-                    // موقعیت تغییر نمی‌کند (فقط کپی می‌شود تا بعداً نویز بخورد)
-                    // در واقع position[d] همان می‌ماند.
+                // 1. بررسی آیا بهترین هستم؟
+                if (core_id == *iter_best_idx_ptr) {
+                    // رفتار بهترین پنگوئن: فقط نویز (بدون حرکت اسپیرال)
+                    // اینجا سریال انجام می‌دهیم چون سبک است
+                    for(int d=0; d<DIM; d++) {
+                         double noise = (*M_ptr) * ((rand() / (double)RAND_MAX) * 2 - 1);
+                         double val = position[d] + noise;
+                         if (val > UB) val = UB;
+                         if (val < LB) val = LB;
+                         position[d] = val;
+                    }
+                    wait(5, SC_NS);
                 } 
                 else {
-                    // *** رفتار پنگوئن معمولی: حرکت اسپیرال دارد ***
-
-                    // 1. Reset Buffers
-                    for(int i=0; i<DIM; i++) {
-                        accumulated_moves[i] = 0;
-                        move_counts[i] = 0;
-                    }
-
-                    // 2. Calc Q
+                    // 2. محاسبه Q (یکبار انجام می‌شود)
                     double dist = 0;
                     for(int k=0; k<DIM; k++) {
                         double diff = position[k] - iter_best_pos_ptr[k];
                         dist += diff * diff;
                     }
                     dist = std::sqrt(dist);
-                    double Q = std::exp(-(*mu_ptr) * dist);
-                    if (Q > 1) Q=1; if (Q < 1e-4) Q=1e-4;
+                    calculated_Q = std::exp(-(*mu_ptr) * dist);
+                    if (calculated_Q > 1) calculated_Q=1; 
+                    if (calculated_Q < 1e-4) calculated_Q=1e-4;
 
-                    // 3. Movement Logic
-                    for (int d1 = 0; d1 < DIM; d1++) {
-                        std::vector<int> partners;
+                    // 3. === فاز موازی‌سازی داخلی ===
+                    // شلیک دستور شروع به تمام ۲۰ واحد ابعاد
+                    start_dims.write(true);
+                    wait(); // یک سیکل صبر برای اعمال سیگنال
+                    start_dims.write(false);
 
-                        #if STRATEGY_ID == 1 // RANDOM
-                            int attempts = 0;
-                            while(partners.size() < N_NEIGHBORS && attempts < DIM*2) {
-                                int rand_d2 = rand() % DIM;
-                                if (rand_d2 != d1) { // نباید خودش باشد
-                                    bool exists = false;
-                                    for(int p : partners) if(p == rand_d2) exists = true;
-                                    if(!exists) partners.push_back(rand_d2);
-                                }
-                                attempts++;
+                    // انتظار برای پایان همه ۲۰ واحد
+                    // (اینجا جایی است که قدرت سخت‌افزار مشخص می‌شود)
+                    bool all_dims_finished = false;
+                    while (!all_dims_finished) {
+                        wait(); 
+                        all_dims_finished = true;
+                        for(auto d : dim_dones) {
+                            if (d->read() == false) {
+                                all_dims_finished = false;
+                                break;
                             }
-                        #else // ALL_PAIRS
-                            for(int d2 = d1 + 1; d2 < DIM; d2++) partners.push_back(d2);
-                        #endif
-
-                        for (int d2 : partners) {
-                            double nx, ny;
-                            alu->compute(position[d1], position[d2], 
-                                         iter_best_pos_ptr[d1], iter_best_pos_ptr[d2], 
-                                         Q, nx, ny);
-                            
-                            accumulated_moves[d1] += nx;
-                            move_counts[d1]++;
-                            
-                            #if STRATEGY_ID == 0
-                                accumulated_moves[d2] += ny;
-                                move_counts[d2]++;
-                            #endif
                         }
                     }
 
-                    wait(20, SC_NS); // Time Simulation
-
-                    // اعمال میانگین حرکت‌ها (قبل از نویز)
-                    for (int d = 0; d < DIM; d++) {
-                        if (move_counts[d] > 0) {
-                            position[d] = accumulated_moves[d] / move_counts[d];
-                        }
+                    // 4. آپدیت نهایی (Commit)
+                    // مقادیر محاسبه شده توسط واحدها را از بافر به متغیر اصلی منتقل می‌کنیم
+                    for(int d=0; d<DIM; d++) {
+                        position[d] = next_position[d];
                     }
-                } // پایان شرط if(is_best)
-
-                // =========================================================
-                // اعمال نویز (مشترک برای همه - حتی بهترین)
-                // =========================================================
-                for (int d = 0; d < DIM; d++) {
-                    double noise = (*M_ptr) * ((rand() / (double)RAND_MAX) * 2 - 1);
-                    double new_pos = position[d] + noise;
-
-                    // Bounds Check
-                    if (new_pos > UB) new_pos = UB;
-                    if (new_pos < LB) new_pos = LB;
-                    
-                    position[d] = new_pos;
                 }
                 
                 done.write(true);
@@ -134,11 +96,47 @@ SC_MODULE(Penguin_Core) {
     }
 
     SC_CTOR(Penguin_Core) {
-        alu = new Spiral_ALU("Internal_ALU");
-        alu->clk(clk);
         SC_THREAD(process_logic);
         sensitive << clk.pos();
         done.initialize(true);
+
+        // --- ساختن ۲۰ واحد پردازش موازی ---
+        for(int d=0; d<DIM; d++) {
+            char name[20];
+            sprintf(name, "DimUnit_%d", d);
+            
+            Dim_Unit* unit = new Dim_Unit(name);
+            sc_signal<bool>* d_done = new sc_signal<bool>();
+
+            // اتصالات پورت‌ها
+            unit->clk(clk);
+            unit->start(start_dims); // همه به یک استارت وصل هستند
+            unit->done(*d_done);
+
+            // تنظیم پوینترها
+            unit->my_d1 = d;
+            unit->current_pos_ptr = position;
+            unit->next_pos_ptr = next_position; // نوشتن در بافر خروجی
+            unit->iter_best_pos_ptr = iter_best_pos_ptr; // این بعدا در main وصل می‌شود، اما اینجا فقط پاس می‌دهیم؟ 
+            // **نکته مهم:** پوینترهای iter_best_pos_ptr در کانستراکتور هنوز مقداردهی نشده‌اند.
+            // ما باید این‌ها را به صورت عمومی تعریف کنیم یا بعدا ست کنیم.
+            // راه حل ساده: پوینترهای کلاس Dim_Unit را مستقیم به متغیرهای کلاس Penguin_Core وصل نکنیم،
+            // بلکه به متغیرهای پوینتری Penguin_Core وصل کنیم. (در ادامه توضیح میدهم)
+            
+            unit->Q_val_ptr = &calculated_Q;
+            unit->M_ptr = M_ptr; // این هم نال است فعلا!
+
+            dim_units.push_back(unit);
+            dim_dones.push_back(d_done);
+        }
+    }
+    
+    // تابع کمکی برای اصلاح پوینترهای فرزندان بعد از ساختن پنگوئن در Main
+    void fix_pointers() {
+        for(auto unit : dim_units) {
+            unit->iter_best_pos_ptr = iter_best_pos_ptr;
+            unit->M_ptr = M_ptr;
+        }
     }
 };
 
