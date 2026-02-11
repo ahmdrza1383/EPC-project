@@ -11,7 +11,7 @@ SC_MODULE(Spiral_ALU) {
     const double a = 1.0;
     const double b = 0.5;
 
-    void compute(double curr_x, double curr_y, double best_x, double best_y, double Q, 
+    void compute(double curr_x, double curr_y, double best_x, double best_y, double Q, double dynamic_a,
                  double &out_nx, double &out_ny) {
         
         double theta_i = std::atan2(curr_y, curr_x);
@@ -23,7 +23,7 @@ SC_MODULE(Spiral_ALU) {
         if (S <= 0) S = 1e-6;
 
         double theta_k = (1.0 / b) * std::log(S);
-        double r_k = a * S;
+        double r_k = dynamic_a * S;
 
         out_nx = r_k * std::cos(theta_k);
         out_ny = r_k * std::sin(theta_k);

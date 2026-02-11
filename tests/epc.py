@@ -14,9 +14,9 @@ class EPC_Optimizer_Final:
         self.strategy = strategy
         self.mode = optimization_mode.lower()
 
-        self.M = 0.5
+        self.M = 0.05
         self.mu = 0.05
-        self.a = 1.0
+        self.a = 0.05
         self.b = 0.5
 
         if self.strategy == 'random':
@@ -150,6 +150,7 @@ class EPC_Optimizer_Final:
             if t > 0:
                 self.M *= 0.99
                 self.mu *= 0.99
+                self.a *= 0.99
 
         total_time = time.time() - start_time
         print("-" * 75)
@@ -170,7 +171,7 @@ def rosenbrock_function(x):
     return sum_val
 
 if __name__ == "__main__":
-    np.random.seed(50) 
+    # np.random.seed(50) 
 
     FUNC_NAME = "sphere" 
     
@@ -183,7 +184,7 @@ if __name__ == "__main__":
 
     optimizer = EPC_Optimizer_Final(
         objective_func=func,
-        dim=100,
+        dim=10,
         bounds=bounds,
         population_size=20,
         max_iter=100,

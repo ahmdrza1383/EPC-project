@@ -19,7 +19,7 @@ SC_MODULE(Dim_Unit) {
     double* iter_best_pos_ptr;
     double* Q_val_ptr;
     double* M_ptr;
-
+    double* a_ptr;
     double* next_pos_ptr;    
 
     Spiral_ALU* alu;
@@ -61,13 +61,14 @@ SC_MODULE(Dim_Unit) {
                     double nx, ny;
                     alu->compute(current_pos_ptr[my_d1], current_pos_ptr[d2], 
                                  iter_best_pos_ptr[my_d1], iter_best_pos_ptr[d2], 
-                                 *Q_val_ptr, nx, ny);
+                                 *Q_val_ptr, *a_ptr,
+                                 nx, ny);
                     
                     accumulated_move += nx;
                     move_count++;
                 }
 
-                wait(5, SC_NS); 
+                wait(5, SC_NS);
 
                 double new_val = current_pos_ptr[my_d1];
                 if (move_count > 0) {
@@ -95,6 +96,7 @@ SC_MODULE(Dim_Unit) {
         iter_best_pos_ptr = nullptr;
         Q_val_ptr = nullptr;
         M_ptr = nullptr;
+        a_ptr = nullptr;
         next_pos_ptr = nullptr;
 
         SC_THREAD(process_logic);

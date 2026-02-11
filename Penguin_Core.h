@@ -3,6 +3,9 @@
 
 #include <systemc.h>
 #include <vector>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include "config.h"
 #include "Dim_Unit.h"
 
@@ -20,6 +23,7 @@ SC_MODULE(Penguin_Core) {
     double* iter_best_pos_ptr;
     double* M_ptr;
     double* mu_ptr;
+    double* a_ptr;
     
     double calculated_Q; 
 
@@ -89,6 +93,7 @@ SC_MODULE(Penguin_Core) {
         for(auto unit : dim_units) {
             unit->iter_best_pos_ptr = this->iter_best_pos_ptr;
             unit->M_ptr = this->M_ptr;
+            unit->a_ptr = this->a_ptr;
         }
     }
 

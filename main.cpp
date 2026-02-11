@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <iomanip>
+#include <ctime>
 #include "config.h"
 #include "Penguin_Core.h"
 #include "Cost_Unit.h" 
@@ -14,7 +15,8 @@ bool is_better(double new_val, double best_val) {
 }
 
 int sc_main(int argc, char* argv[]) {
-    srand(50); 
+    // srand(50); 
+    srand(time(0));
 
     sc_clock clk("clk", 10, SC_NS);
     
@@ -33,6 +35,7 @@ int sc_main(int argc, char* argv[]) {
     int iter_best_idx_shared = -1; 
     double M = M_INIT;
     double mu = MU_INIT;
+    double current_a = A_INIT;
     
     double global_best_score;
     #if OPT_MODE == 0
@@ -60,6 +63,7 @@ int sc_main(int argc, char* argv[]) {
         p->iter_best_pos_ptr = iter_best_pos;
         p->M_ptr = &M;
         p->mu_ptr = &mu;
+        p->a_ptr = &current_a;
         
         for(int d=0; d<DIM; d++) {
             p->position[d] = LB + ((rand()/(double)RAND_MAX) * (UB - LB));
@@ -85,12 +89,6 @@ int sc_main(int argc, char* argv[]) {
         cost_dones.push_back(c_done);
     }
 
-    sc_trace_file *tf = sc_create_vcd_trace_file("epc_waves");
-    sc_trace(tf, clk, "clk");
-    sc_trace(tf, start_move_all, "Start_Move");
-    sc_trace(tf, start_calc_all, "Start_Cost");
-    sc_trace(tf, global_best_score, "Global_Best");
-
     for (int t = 0; t < MAX_ITER; t++) {
 
         start_calc_all.write(true);
@@ -111,9 +109,9 @@ int sc_main(int argc, char* argv[]) {
 
         double best_val_iter;
         #if OPT_MODE == 0
-             best_val_iter = 1e9;
+            best_val_iter = 1e9;
         #else
-             best_val_iter = -1e9;
+            best_val_iter = -1e9;
         #endif
         int best_idx = -1;
 
@@ -156,9 +154,9 @@ int sc_main(int argc, char* argv[]) {
 
         M *= COOLING_RATE;
         mu *= COOLING_RATE;
+        current_a *= COOLING_RATE;
     }
 
-    sc_close_vcd_trace_file(tf);
     std::cout << "=== FINISHED ===" << std::endl;
 
     for(auto p : penguins) delete p;
